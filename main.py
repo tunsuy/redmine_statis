@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from excel_handler import ExcelHandler
+
 import sys
+import multiprocessing
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -15,7 +17,16 @@ def main():
 	end_time = sys.argv[2]
 	excel_handler = ExcelHandler()
 	excel_handler.create_static_workbook_sheet()
+
+	# 单线程处理数据统计
 	excel_handler.write_static_data(start_time, end_time)
+
+	# 多线程处理数据统计
+	# excel_handler.write_static_data_multiThread(start_time, end_time)
+
+	# 多进程处理数据统计
+	# excel_handler.write_static_data_multiProcess(start_time, end_time)
+
 
 if __name__ == '__main__':
 	main()

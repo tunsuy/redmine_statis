@@ -5,6 +5,8 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 import sys
 import os
+import threading
+import multiprocessing
 
 from data_handler import DataHandler
 
@@ -22,12 +24,32 @@ db_conf = {
 
 WORKBOOK_NAME = "MOA迭代统计数据.xlsx"
 
+'''================================================================'''
+### 只用于多进程统计
+# import copy_reg
+# import types
+ 
+# def _pickle_method(m):
+#     if m.im_self is None:
+#         return getattr, (m.im_class, m.im_func.func_name)
+#     else:
+#         return getattr, (m.im_self, m.im_func.func_name)
+ 
+# copy_reg.pickle(types.MethodType, _pickle_method)
+
+def _proxy(instance, event, *args):
+	return getattr(instance, event)(*args)
+
+'''================================================================'''
+
 class ExcelHandler(object):
 	"""将统计数据写入excel文件"""
 	def __init__(self):
 		self.data_handler = DataHandler(**db_conf)
 
 	def create_static_workbook_sheet(self):
+		''' @summary: 创建excel文件及相关信息 '''
+
 		if os.path.isfile(WORKBOOK_NAME):
 			os.remove(WORKBOOK_NAME)
 
@@ -45,11 +67,74 @@ class ExcelHandler(object):
 		self.__save_workbook()
 
 	def write_static_data(self, start_time, end_time):
+		''' @summary 单线程实现数据统计 '''
+
 		self.__write_person_version_bug()
 		self.__write_module_version_bug()
 		self.__write_person_online_issue(start_time, end_time)
 		self.__write_person_not_finish_issue()
 		self.__write_person_version_work_weight()
+
+	def write_static_data_multiThread(self, start_time, end_time):
+		''' @summary: 多线程实现数据统计
+		    @note: 由于Python的GIL机制，多线程不一定效率更高 
+		    该方法没有测试，应该是没有问题的 '''
+
+		events = [
+			self.__write_person_version_bug,
+			self.__write_module_version_bug,
+			self.__write_person_online_issue,
+			self.__write_person_not_finish_issue,
+			self.__write_person_version_work_weight
+		]
+
+		for event in events:
+			t = None
+			if event == self.__write_person_online_issue:
+				t = threading.Thread(target = event, args = (start_time, end_time))
+			else:
+				t = threading.Thread(target = event)
+
+			t.start()
+			t.join()
+
+	def write_static_data_multiProcess(self, start_time, end_time):
+		''' @summary: 多进程实现数据统计 
+			@note: 注意pickle机制
+			该方法没有测试，应该是没有问题的'''
+
+		events = [
+			"_ExcelHandler__write_person_version_bug",
+			"_ExcelHandler__write_module_version_bug",
+			"_ExcelHandler__write_person_online_issue",
+			"_ExcelHandler__write_person_not_finish_issue",
+			"_ExcelHandler__write_person_version_work_weight"
+		] #双下划线的属性在类中实际的属性名是需要加个类名前缀的
+
+		#注意：进程数不要太多
+		# cpus = multiprocessing.cpu_count() #获取CPU个数
+		pool = multiprocessing.Pool(processes = len(events))
+		results = []
+
+		for event in events:
+			# _pickle_method(event)
+
+			result = None
+			if event == "_ExcelHandler__write_person_online_issue":
+				event = _proxy(self, event, start_time, end_time)
+				result = pool.apply_async(event, args = (start_time, end_time))
+			else:
+				event = _proxy(self, event)
+				result = pool.apply_async(event)
+			results.append(result)
+
+		pool.close()
+		pool.join()
+
+		# for result in results:
+		# 	print("result: ", result.get())
+
+  		print("done")
 
 	def __save_workbook(self):
 		self.wb.save(filename = WORKBOOK_NAME)	
@@ -107,6 +192,7 @@ class ExcelHandler(object):
 	'''======================================================================='''
 	def __write_person_version_bug(self):
 		""" 写入个人迭代bug数excel文档 """
+		print("write_person_bug")
 		self.__write_proj_version_row(self.person_version_bug_sheet)
 		self.__write_username_col(self.person_version_bug_sheet)
 
