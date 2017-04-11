@@ -14,10 +14,10 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 
 db_conf = {
-	"host": "200.200.169.163",
-	"port": "3306",
-	"user": "redmine_static",
-	"passwd": "moatest",
+	"host": "xxxxx",
+	"port": "xxx",
+	"user": "xxxxx",
+	"passwd": "xxxxx",
 	"db": "bitnami_redmine",
 	"charset": "utf8mb4"
 }
