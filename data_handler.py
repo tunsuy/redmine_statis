@@ -64,22 +64,22 @@ class DataHandler(object):
 				return user_info["id"]
 
 	'''==================================================='''
-	def get_proj_versions_list(self):
+	def get_proj_versions_list(self, proj_id):
 		""" 获取项目版本列表，采用了内存缓存的机制
 			返回：dictionary类型元素的list """
 		print("get project versinons data...")
 		if self.proj_versions_info is None:
-			self.pro_versions_info = self.__get_proj_versions_from_db()
+			self.pro_versions_info = self.__get_proj_versions_from_db(proj_id)
 		return self.pro_versions_info
 
-	def __get_proj_versions_from_db(self):
+	def __get_proj_versions_from_db(self, proj_id):
 		print("get project versinons data from db...")
-		sql = "SELECT id, name FROM versions WHERE project_id = 1" #指定为MOA迭代项目
+		sql = "SELECT id, name FROM versions WHERE project_id = {}".format(proj_id) 
 		proj_versions_info = self.select_db_data_list(sql)
 		return self.__tuple_tuple_to_dic_list(proj_versions_info)
 
-	def __get_proj_version_id_with_name(self, version_name):
-		proj_versions_info = self.get_proj_versions_list()
+	def __get_proj_version_id_with_name(self, version_name, proj_id):
+		proj_versions_info = self.get_proj_versions_list(proj_id)
 		for proj_version_info in proj_versions_info:
 			if proj_version_info["name"] == version_name:
 				return proj_version_info["id"]
@@ -189,9 +189,8 @@ class DataHandler(object):
 		print("bug for statuses_id: {}".format(statuses_id))
 		return statuses_id
 
-	def get_person_version_bug_count(self, person_name, proj_version_name):
+	def get_person_version_bug_count(self, person_name, proj_version_name, proj_id):
 		""" 个人迭代bug数：发现版本custom_field_id=5
-				只统计project_id=1（MOA迭代项目）
 			cond: 跟踪标签 = 错误 + 网上问题 + 问题
 				  问题状态 != 拒绝
 			返回：某人某版本的bug数
@@ -203,15 +202,15 @@ class DataHandler(object):
 		statuses_id = self.__person_bug_with_statuses_id(person_bug_not_statuses, True)
 
 		person_id = self.__get_user_id_with_name(person_name)
-		proj_version_id = self.__get_proj_version_id_with_name(proj_version_name)
+		proj_version_id = self.__get_proj_version_id_with_name(proj_version_name, proj_id)
 
 		# sql = "SELECT COUNT(*) FROM (issues a INNER JOIN custom_values b ON a.id = b.customized_id" \
 		# 	" AND a.tracker_id in{} AND a.project_id = {} AND a.status_id in {} AND a.assigned_to_id = {})" \
 		# 	" INNER JOIN custom_fields c ON b.custom_field_id = c.id AND c.id = {} AND b.value = {}" \
 		# 	.format(trackers_id, 1, statuses_id, person_id, 5, proj_version_id)
 
-		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = 1 AND status_id in {}" \
-			" AND assigned_to_id = {}".format(trackers_id, statuses_id, person_id)
+		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = {} AND status_id in {}" \
+			" AND assigned_to_id = {}".format(trackers_id, proj_id, statuses_id, person_id)
 
 		custom_values_version_sql = "SELECT customized_id AS id FROM custom_values" \
 			" WHERE custom_field_id = 5 AND value = {}" \
@@ -226,9 +225,8 @@ class DataHandler(object):
 
 		return person_bug_count[0][0]
 
-	def get_module_version_bug_count(self, module_name, proj_version_name):
+	def get_module_version_bug_count(self, module_name, proj_version_name, proj_id):
 		""" 模块迭代bug数：模块custom_field_id=2，发现版本custom_field_id=5
-				只统计project_id=1（MOA迭代项目）
 			cond: 跟踪标签 = 错误 + 网上问题
 				  问题状态 != 拒绝
 			返回：某模块某版本的bug数
@@ -241,10 +239,10 @@ class DataHandler(object):
 		module_bug_not_statuses = ["拒绝"]
 		statuses_id = self.__person_bug_with_statuses_id(module_bug_not_statuses, True)
 
-		proj_version_id = self.__get_proj_version_id_with_name(proj_version_name)
+		proj_version_id = self.__get_proj_version_id_with_name(proj_version_name, proj_id)
 
-		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = 1 AND status_id in {}" \
-			.format(trackers_id, statuses_id)
+		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = {} AND status_id in {}" \
+			.format(trackers_id, proj_id, statuses_id)
 
 		custom_values_module_sql = "SELECT customized_id AS id FROM custom_values" \
 			" WHERE custom_field_id = 2 AND value = '{}'" \
@@ -267,10 +265,11 @@ class DataHandler(object):
 
 		return module_bug_count[0][0]
 
-	def get_person_online_issue_count(self, person_name, start_time, end_time):
-		""" 个人网上问题数：只统计project_id=1（MOA迭代项目）
+	def get_person_online_issue_count(self, person_name, start_time, end_time, proj_id):
+		""" 统计个人网上问题数
 			cond: 跟踪标签 = 网上问题
 				  问题状态 != 拒绝
+				  person_name = 责任人(custom_field_id = 4)
 			返回：某人某个时间段的网上问题数
 		"""
 		person_bug_trackers = ["网上问题"]
@@ -281,19 +280,33 @@ class DataHandler(object):
 
 		person_id = self.__get_user_id_with_name(person_name)
 
-		sql = "SELECT COUNT(id) FROM issues WHERE tracker_id in{} AND project_id = 1 AND status_id in {}" \
-			" AND assigned_to_id = {} AND created_on > '{}' AND created_on < '{}'" \
-			.format(trackers_id, statuses_id, person_id, start_time, end_time)
+		# sql = "SELECT COUNT(id) FROM issues WHERE tracker_id in{} AND project_id = 1 AND status_id in {}" \
+		# 	" AND assigned_to_id = {} AND created_on > '{}' AND created_on < '{}'" \
+		# 	.format(trackers_id, statuses_id, person_id, start_time, end_time)
+
+		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = {} AND status_id in {}" \
+			" AND created_on > '{}' AND created_on < '{}'".format(trackers_id, proj_id, statuses_id, start_time, end_time)
+
+		custom_values_responsible_sql = "SELECT customized_id AS id FROM custom_values" \
+			" WHERE custom_field_id = 4 AND value = {}" \
+			.format(person_id)
+
+		online_issue_sql = "SELECT issues_filter.id FROM ({})issues_filter LEFT JOIN ({})custom_values_responsible" \
+			" USING(id) WHERE custom_values_responsible.id is not null" \
+			.format(issues_filter_sql, custom_values_responsible_sql)
+
+		sql = "SELECT COUNT(online_issue.id) FROM ({})online_issue".format(online_issue_sql)
 
 		person_online_count = self.select_db_data_list(sql)
 		print("person_online_count: {}".format(person_online_count[0][0]))
 
 		return person_online_count[0][0]
 
-	def get_person_not_finish_issue_count(self, person_name):
-		""" 个人遗留问题数：只统计project_id=1（MOA迭代项目）
+	def get_person_not_finish_issue_count(self, person_name, proj_id):
+		""" 统计个人遗留问题数
 			cond: 跟踪标签 = 网上问题+问题+错误
 				  问题状态 = 新建+进行中+后续再解决
+				  person = 指派给(assigned_to_id)
 			返回：某人某个时间段的网上问题数
 		"""
 		person_bug_trackers = ["网上问题", "问题", "错误"]
@@ -304,18 +317,17 @@ class DataHandler(object):
 
 		person_id = self.__get_user_id_with_name(person_name)
 
-		sql = "SELECT COUNT(id) FROM issues WHERE tracker_id in{} AND project_id = 1 AND status_id in {}" \
+		sql = "SELECT COUNT(id) FROM issues WHERE tracker_id in{} AND project_id = {} AND status_id in {}" \
 			" AND assigned_to_id = {}" \
-			.format(trackers_id, statuses_id, person_id)
+			.format(trackers_id, proj_id, statuses_id, person_id)
 
 		person_not_finish_count = self.select_db_data_list(sql)
 		print("person_not_finish_count: {}".format(person_not_finish_count[0][0]))
 
 		return person_not_finish_count[0][0]
 
-	def get_person_version_work_weight(self, person_name, proj_version_name):
+	def get_person_version_work_weight(self, person_name, proj_version_name, proj_id):
 		""" 个人迭代工作粒度：解决版本custom_field_id=9；工作粒度custom_field_id=7
-				只统计project_id=1（MOA迭代项目）
 			cond: 跟踪标签 = 功能
 				  问题状态 = 已回归+已解决
 			返回：某人某个时间段的网上问题数
@@ -327,10 +339,10 @@ class DataHandler(object):
 		statuses_id = self.__person_bug_with_statuses_id(person_bug_statuses, False)
 
 		person_id = self.__get_user_id_with_name(person_name)
-		proj_version_id = self.__get_proj_version_id_with_name(proj_version_name)
+		proj_version_id = self.__get_proj_version_id_with_name(proj_version_name, proj_id)
 
-		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = 1 AND status_id in {}" \
-			" AND assigned_to_id = {}".format(trackers_id, statuses_id, person_id)
+		issues_filter_sql = "SELECT id FROM issues WHERE tracker_id in{} AND project_id = {} AND status_id in {}" \
+			" AND assigned_to_id = {}".format(trackers_id, proj_id, statuses_id, person_id)
 
 		custom_values_version_sql = "SELECT customized_id AS id FROM custom_values" \
 			" WHERE custom_field_id = 9 AND value = {}" \

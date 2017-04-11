@@ -22,7 +22,7 @@ class DBConn(object):
 	def release(self):
 		print("release DBConn...")
 		self.close()
-		sys.exit(1)
+		sys.exit(0)
 
 	def close(self):
 		print("close mysql connection...")

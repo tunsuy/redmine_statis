@@ -64,16 +64,22 @@ class ExcelHandler(object):
 		self.person_not_finish_issue_sheet.title = unicode("个人未完成任务数")
 		self.person_online_issue_sheet = self.wb.create_sheet()
 		self.person_online_issue_sheet.title = unicode("个人迭代网上问题数")
+		self.web_person_version_work_weight_sheet = self.wb.create_sheet()
+		self.web_person_version_work_weight_sheet.title = unicode("web个人迭代工作粒度总和")
 		self.__save_workbook()
 
 	def write_static_data(self, start_time, end_time):
-		''' @summary 单线程实现数据统计 '''
+		''' @summary 单线程实现数据统计 
+		    @note: 这些方法都接收一个项目id的参数
+		           1：MOA迭代项目
+		           3：web组迭代项目'''
 
-		self.__write_person_version_bug()
-		self.__write_module_version_bug()
-		self.__write_person_online_issue(start_time, end_time)
-		self.__write_person_not_finish_issue()
-		self.__write_person_version_work_weight()
+		self.__write_person_version_bug(1)
+		self.__write_module_version_bug(1)
+		self.__write_person_online_issue(start_time, end_time, 1)
+		self.__write_person_not_finish_issue(1)
+		self.__write_person_version_work_weight(1)
+		self.__write_web_person_version_work_weight(3)
 
 	def write_static_data_multiThread(self, start_time, end_time):
 		''' @summary: 多线程实现数据统计
@@ -140,9 +146,9 @@ class ExcelHandler(object):
 		self.wb.save(filename = WORKBOOK_NAME)	
 
 	'''================================================================'''
-	def __write_proj_version_row(self, sheet):
+	def __write_proj_version_row(self, sheet, proj_id):
 		""" 写入excel文档的版本行：第1行，第2列开始 """
-		proj_versions_info_sorted = self.__get_proj_versions_list_sorted()
+		proj_versions_info_sorted = self.__get_proj_versions_list_sorted(proj_id)
 		for index in xrange(0, len(proj_versions_info_sorted)):
 			sheet.cell(column=index+2, row=1, value=proj_versions_info_sorted[index]["name"])
 		self.__save_workbook()
@@ -162,9 +168,9 @@ class ExcelHandler(object):
 		self.__save_workbook()
 
 	'''================================================================'''
-	def __get_proj_versions_list_sorted(self):
+	def __get_proj_versions_list_sorted(self, proj_id):
 		""" 返回：排好序的项目版本列表 """
-		proj_versions_info = self.data_handler.get_proj_versions_list()
+		proj_versions_info = self.data_handler.get_proj_versions_list(proj_id)
 		proj_versions_info_sorted = self.__list_contain_dict_sort(proj_versions_info, "id")
 		print("proj_versions_info: {}".format(proj_versions_info_sorted))
 		return proj_versions_info_sorted
@@ -190,80 +196,96 @@ class ExcelHandler(object):
 		return modules_name_sorted
 
 	'''======================================================================='''
-	def __write_person_version_bug(self):
+	def __write_person_version_bug(self, proj_id):
 		""" 写入个人迭代bug数excel文档 """
 		print("write_person_bug")
-		self.__write_proj_version_row(self.person_version_bug_sheet)
+		self.__write_proj_version_row(self.person_version_bug_sheet, proj_id)
 		self.__write_username_col(self.person_version_bug_sheet)
 
 		users_info_sorted = self.__get_users_list_sorted()
-		proj_versions_info_sorted = self.__get_proj_versions_list_sorted()
+		proj_versions_info_sorted = self.__get_proj_versions_list_sorted(proj_id)
 		for u_index in xrange(0, len(users_info_sorted)):
 			for v_index in xrange(0, len(proj_versions_info_sorted)):
-				person_version_bug_count = self.data_handler.get_person_version_bug_count(users_info_sorted[u_index]["name"], proj_versions_info_sorted[v_index]["name"])
+				person_version_bug_count = self.data_handler.get_person_version_bug_count(users_info_sorted[u_index]["name"], proj_versions_info_sorted[v_index]["name"], proj_id)
 				if person_version_bug_count == 0:
 					continue
 				self.person_version_bug_sheet.cell(column=v_index+2, row=u_index+2, value=person_version_bug_count)
 		self.__save_workbook()
 
 	'''======================================================================='''
-	def __write_module_version_bug(self):
+	def __write_module_version_bug(self, proj_id):
 		""" 写入模块迭代bug数excel文档 """
-		self.__write_proj_version_row(self.module_version_bug_sheet)
+		self.__write_proj_version_row(self.module_version_bug_sheet, proj_id)
 		self.__write_module_name_col(self.module_version_bug_sheet)
 
 		modules_name_sorted = self.__get_modules_name_list_sorted()
-		proj_versions_info_sorted = self.__get_proj_versions_list_sorted()
+		proj_versions_info_sorted = self.__get_proj_versions_list_sorted(proj_id)
 		for m_index in xrange(0, len(modules_name_sorted)):
 			for v_index in xrange(0, len(proj_versions_info_sorted)):
-				module_version_bug_count = self.data_handler.get_module_version_bug_count(modules_name_sorted[m_index], proj_versions_info_sorted[v_index]["name"])
+				module_version_bug_count = self.data_handler.get_module_version_bug_count(modules_name_sorted[m_index], proj_versions_info_sorted[v_index]["name"], proj_id)
 				if module_version_bug_count == 0:
 					continue
 				self.module_version_bug_sheet.cell(column=v_index+2, row=m_index+2, value=module_version_bug_count)
 		self.__save_workbook()
 
 	'''======================================================================='''
-	def __write_person_online_issue(self, start_time, end_time):
+	def __write_person_online_issue(self, start_time, end_time, proj_id):
 		""" 写入个人网上问题数excel文档 """
 		self.__write_username_col(self.person_online_issue_sheet)
 		self.person_online_issue_sheet.cell(column=2, row=1, value="{}至{}".format(start_time, end_time))
 
 		users_info_sorted = self.__get_users_list_sorted()
 		for u_index in xrange(0, len(users_info_sorted)):
-			person_online_count = self.data_handler.get_person_online_issue_count(users_info_sorted[u_index]["name"], start_time, end_time)
+			person_online_count = self.data_handler.get_person_online_issue_count(users_info_sorted[u_index]["name"], start_time, end_time, proj_id)
 			if person_online_count == 0:
 				continue
 			self.person_online_issue_sheet.cell(column=2, row=u_index+2, value=person_online_count)
 		self.__save_workbook()
 
 	'''======================================================================='''
-	def __write_person_not_finish_issue(self):
+	def __write_person_not_finish_issue(self, proj_id):
 		""" 写入个人遗留问题数excel文档 """
 		self.__write_username_col(self.person_not_finish_issue_sheet)
 		self.person_not_finish_issue_sheet.cell(column=2, row=1, value="遗留问题")
 
 		users_info_sorted = self.__get_users_list_sorted()
 		for u_index in xrange(0, len(users_info_sorted)):
-			person_not_finish_count = self.data_handler.get_person_not_finish_issue_count(users_info_sorted[u_index]["name"])
+			person_not_finish_count = self.data_handler.get_person_not_finish_issue_count(users_info_sorted[u_index]["name"], proj_id)
 			if person_not_finish_count == 0:
 				continue
 			self.person_not_finish_issue_sheet.cell(column=2, row=u_index+2, value=person_not_finish_count)
 		self.__save_workbook()
 
 	'''======================================================================='''
-	def __write_person_version_work_weight(self):
+	def __write_person_version_work_weight(self, proj_id):
 		""" 写入个人迭代工作粒度excel文档 """
-		self.__write_proj_version_row(self.person_version_work_weight_sheet)
+		self.__write_proj_version_row(self.person_version_work_weight_sheet, proj_id)
 		self.__write_username_col(self.person_version_work_weight_sheet)
 
 		users_info_sorted = self.__get_users_list_sorted()
-		proj_versions_info_sorted = self.__get_proj_versions_list_sorted()
+		proj_versions_info_sorted = self.__get_proj_versions_list_sorted(proj_id)
 		for u_index in xrange(0, len(users_info_sorted)):
 			for v_index in xrange(0, len(proj_versions_info_sorted)):
-				person_version_work_weight = self.data_handler.get_person_version_work_weight(users_info_sorted[u_index]["name"], proj_versions_info_sorted[v_index]["name"])
+				person_version_work_weight = self.data_handler.get_person_version_work_weight(users_info_sorted[u_index]["name"], proj_versions_info_sorted[v_index]["name"], proj_id)
 				if person_version_work_weight == 0:
 					continue
 				self.person_version_work_weight_sheet.cell(column=v_index+2, row=u_index+2, value=person_version_work_weight)
+		self.__save_workbook()
+
+	'''======================================================================='''
+	def __write_web_person_version_work_weight(self, proj_id):
+		""" 写入web个人迭代工作粒度excel文档 """
+		self.__write_proj_version_row(self.web_person_version_work_weight_sheet, proj_id)
+		self.__write_username_col(self.web_person_version_work_weight_sheet)
+
+		users_info_sorted = self.__get_users_list_sorted()
+		proj_versions_info_sorted = self.__get_proj_versions_list_sorted(proj_id)
+		for u_index in xrange(0, len(users_info_sorted)):
+			for v_index in xrange(0, len(proj_versions_info_sorted)):
+				person_version_work_weight = self.data_handler.get_person_version_work_weight(users_info_sorted[u_index]["name"], proj_versions_info_sorted[v_index]["name"], proj_id)
+				if person_version_work_weight == 0:
+					continue
+				self.web_person_version_work_weight_sheet.cell(column=v_index+2, row=u_index+2, value=person_version_work_weight)
 		self.__save_workbook()
 
 	# def __set_head_cell_style(self, col, row, style):
